@@ -6,7 +6,6 @@ import (
 
 	. "github.com/cloudfoundry/cli/cf/commands/application"
 
-	"github.com/cloudfoundry/cli/cf/api"
 	"github.com/cloudfoundry/cli/cf/command_registry"
 	"github.com/cloudfoundry/cli/cf/configuration/core_config"
 	"github.com/cloudfoundry/cli/cf/errors"
@@ -15,7 +14,8 @@ import (
 
 	testAppInstanaces "github.com/cloudfoundry/cli/cf/api/app_instances/fakes"
 	testApplication "github.com/cloudfoundry/cli/cf/api/applications/fakes"
-	testapi "github.com/cloudfoundry/cli/cf/api/fakes"
+	"github.com/cloudfoundry/cli/cf/api/logs"
+	testapilogs "github.com/cloudfoundry/cli/cf/api/logs/fakes"
 	appCmdFakes "github.com/cloudfoundry/cli/cf/commands/application/fakes"
 	testcmd "github.com/cloudfoundry/cli/testhelpers/commands"
 	testconfig "github.com/cloudfoundry/cli/testhelpers/configuration"
@@ -37,8 +37,8 @@ var _ = Describe("start command", func() {
 		defaultInstanceResponses  [][]models.AppInstanceFields
 		defaultInstanceErrorCodes []string
 		requirementsFactory       *testreq.FakeReqFactory
-		logMessages               []*logmessage.LogMessage
-		logRepo                   *testapi.FakeLogsRepository
+		logMessages               []logs.Loggable
+		logRepo                   *testapilogs.FakeLogsRepository
 		appInstancesRepo          *testAppInstanaces.FakeAppInstancesRepository
 		appRepo                   *testApplication.FakeApplicationRepository
 		OriginalAppCommand        command_registry.Command
@@ -46,7 +46,7 @@ var _ = Describe("start command", func() {
 		displayApp                *appCmdFakes.FakeAppDisplayer
 	)
 
-	updateCommandDependency := func(logsRepo api.LogsRepository) {
+	updateCommandDependency := func(logsRepo logs.LogsRepository) {
 		deps.Ui = ui
 		deps.Config = configRepo
 		deps.RepoLocator = deps.RepoLocator.SetLogsRepository(logsRepo)
@@ -132,10 +132,10 @@ var _ = Describe("start command", func() {
 			[]models.AppInstanceFields{instance3, instance4},
 		}
 
-		logRepo = &testapi.FakeLogsRepository{}
-		logMessages = []*logmessage.LogMessage{}
-		logRepo.TailLogsForStub = func(appGuid string, onConnect func()) (<-chan *logmessage.LogMessage, error) {
-			c := make(chan *logmessage.LogMessage)
+		logRepo = &testapilogs.FakeLogsRepository{}
+		logMessages = []logs.Loggable{}
+		logRepo.TailLogsForStub = func(appGuid string, onConnect func()) (<-chan logs.Loggable, error) {
+			c := make(chan logs.Loggable)
 
 			onConnect()
 			go func() {
@@ -163,7 +163,7 @@ var _ = Describe("start command", func() {
 
 	callStartWithLoggingTimeout := func(args []string) (ui *testterm.FakeUI) {
 
-		logRepoWithTimeout := &testapi.FakeLogsRepositoryWithTimeout{}
+		logRepoWithTimeout := &testapilogs.FakeLogsRepositoryWithTimeout{}
 
 		updateCommandDependency(logRepoWithTimeout)
 
@@ -362,7 +362,7 @@ var _ = Describe("start command", func() {
 			wrongSourceName := "DEA"
 			correctSourceName := "STG"
 
-			logMessages = []*logmessage.LogMessage{
+			logMessages = []logs.Loggable{
 				testlogs.NewLogMessage("Log Line 1", defaultAppForStart.Guid, wrongSourceName, "1", logmessage.LogMessage_OUT, currentTime),
 				testlogs.NewLogMessage("Log Line 2", defaultAppForStart.Guid, correctSourceName, "1", logmessage.LogMessage_OUT, currentTime),
 				testlogs.NewLogMessage("Log Line 3", defaultAppForStart.Guid, correctSourceName, "1", logmessage.LogMessage_OUT, currentTime),
@@ -384,8 +384,8 @@ var _ = Describe("start command", func() {
 		It("gracefully handles starting an app that is still staging", func() {
 			logRepoClosed := make(chan struct{})
 
-			logRepo.TailLogsForStub = func(appGuid string, onConnect func()) (<-chan *logmessage.LogMessage, error) {
-				c := make(chan *logmessage.LogMessage)
+			logRepo.TailLogsForStub = func(appGuid string, onConnect func()) (<-chan logs.Loggable, error) {
+				c := make(chan logs.Loggable)
 				onConnect()
 
 				go func() {
