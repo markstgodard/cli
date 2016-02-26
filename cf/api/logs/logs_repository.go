@@ -14,3 +14,12 @@ type LogsRepository interface {
 	TailLogsFor(appGuid string, onConnect func()) (<-chan Loggable, error)
 	Close()
 }
+
+const bufferTime time.Duration = 25 * time.Millisecond
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

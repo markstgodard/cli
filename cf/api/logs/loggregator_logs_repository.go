@@ -20,8 +20,6 @@ type LoggregatorLogsRepository struct {
 	messageQueue   *LoggregatorMessageQueue
 }
 
-const bufferTime time.Duration = 25 * time.Millisecond
-
 func NewLoggregatorLogsRepository(config core_config.Reader, consumer consumer.LoggregatorConsumer, refresher authentication.TokenRefresher) LogsRepository {
 	return &LoggregatorLogsRepository{
 		config:         config,

@@ -32,6 +32,7 @@ import (
 	"github.com/cloudfoundry/cli/cf/v3/repository"
 	v3client "github.com/cloudfoundry/go-ccapi/v3/client"
 	consumer "github.com/cloudfoundry/loggregator_consumer"
+	"github.com/cloudfoundry/noaa"
 )
 
 type RepositoryLocator struct {
@@ -102,9 +103,15 @@ func NewRepositoryLocator(config core_config.ReadWriter, gatewaysByName map[stri
 	loc.domainRepo = NewCloudControllerDomainRepository(config, cloudControllerGateway, strategy)
 	loc.endpointRepo = NewEndpointRepository(config, cloudControllerGateway)
 
-	consumer := consumer.New(config.LoggregatorEndpoint(), tlsConfig, http.ProxyFromEnvironment)
-	consumer.SetDebugPrinter(terminal.DebugPrinter{})
-	loc.logsRepo = logs.NewLoggregatorLogsRepository(config, consumer, loc.authRepo)
+	if false {
+		consumer := consumer.New(config.LoggregatorEndpoint(), tlsConfig, http.ProxyFromEnvironment)
+		consumer.SetDebugPrinter(terminal.DebugPrinter{})
+		loc.logsRepo = logs.NewLoggregatorLogsRepository(config, consumer, loc.authRepo)
+	} else {
+		consumer := noaa.NewConsumer(config.DopplerEndpoint(), tlsConfig, http.ProxyFromEnvironment)
+		consumer.SetDebugPrinter(terminal.DebugPrinter{})
+		loc.logsRepo = logs.NewNoaaLogsRepository(config, consumer, loc.authRepo)
+	}
 
 	loc.organizationRepo = organizations.NewCloudControllerOrganizationRepository(config, cloudControllerGateway)
 	loc.passwordRepo = password.NewCloudControllerPasswordRepository(config, uaaGateway)

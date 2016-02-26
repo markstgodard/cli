@@ -2,7 +2,7 @@ package logs_test
 
 import (
 	authenticationfakes "github.com/cloudfoundry/cli/cf/api/authentication/fakes"
-	testapi "github.com/cloudfoundry/cli/cf/api/fakes"
+	testapi "github.com/cloudfoundry/cli/cf/api/logs/fakes"
 	"github.com/cloudfoundry/cli/cf/configuration/core_config"
 	"github.com/cloudfoundry/cli/cf/errors"
 	testconfig "github.com/cloudfoundry/cli/testhelpers/configuration"

@@ -1,35 +1,40 @@
 package logs
 
 import (
+	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"fmt"
-
 	"github.com/cloudfoundry/cli/cf/terminal"
-	"github.com/cloudfoundry/loggregatorlib/logmessage"
+	"github.com/cloudfoundry/sonde-go/events"
 )
 
-type loggregatorLogMessage struct {
-	msg *logmessage.LogMessage
+type noaaLogMessage struct {
+	msg *events.LogMessage
 }
 
-func NewLoggregatorLogMessage(m *logmessage.LogMessage) *loggregatorLogMessage {
-	return &loggregatorLogMessage{
+func NewNoaaLogMessage(m *events.LogMessage) *noaaLogMessage {
+	return &noaaLogMessage{
 		msg: m,
 	}
 }
 
-func (m *loggregatorLogMessage) GetSourceName() string {
-	return m.msg.GetSourceName()
+func (m *noaaLogMessage) ToSimpleLog() string {
+	msgText := string(m.msg.GetMessage())
+
+	return strings.TrimRight(msgText, "\r\n")
 }
 
-func (m *loggregatorLogMessage) ToLog(loc *time.Location) string {
+func (m *noaaLogMessage) GetSourceName() string {
+	return m.msg.GetSourceType()
+}
+
+func (m *noaaLogMessage) ToLog(loc *time.Location) string {
 	logMsg := m.msg
 
-	sourceName := logMsg.GetSourceName()
-	sourceID := logMsg.GetSourceId()
+	sourceName := logMsg.GetSourceType()
+	sourceID := logMsg.GetSourceInstance()
 	t := time.Unix(0, logMsg.GetTimestamp())
 	timeFormat := "2006-01-02T15:04:05.00-0700"
 	timeString := t.In(loc).Format(timeFormat)
@@ -60,7 +65,7 @@ func (m *loggregatorLogMessage) ToLog(loc *time.Location) string {
 	coloringFunc := terminal.LogStdoutColor
 	logType := "OUT"
 
-	if logMsg.GetMessageType() == logmessage.LogMessage_ERR {
+	if logMsg.GetMessageType() == events.LogMessage_ERR {
 		coloringFunc = terminal.LogStderrColor
 		logType = "ERR"
 	}
@@ -74,10 +79,3 @@ func (m *loggregatorLogMessage) ToLog(loc *time.Location) string {
 
 	return fmt.Sprintf("%s%s", coloredLogHeader, logContent)
 }
-
-func (m *loggregatorLogMessage) ToSimpleLog() string {
-	msgText := string(m.msg.GetMessage())
-
-	return strings.TrimRight(msgText, "\r\n")
-}
-
