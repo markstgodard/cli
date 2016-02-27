@@ -9,15 +9,14 @@ import (
 )
 
 type FakeNoaaConsumer struct {
-	TailingLogsWithoutReconnectStub        func(appGuid string, authToken string, outputChan chan<- *events.LogMessage) error
-	tailingLogsWithoutReconnectMutex       sync.RWMutex
-	tailingLogsWithoutReconnectArgsForCall []struct {
+	TailingLogsStub        func(appGuid string, authToken string, outputChan chan<- *events.LogMessage, errorChan chan<- error, stopChan chan struct{})
+	tailingLogsMutex       sync.RWMutex
+	tailingLogsArgsForCall []struct {
 		appGuid    string
 		authToken  string
 		outputChan chan<- *events.LogMessage
-	}
-	tailingLogsWithoutReconnectReturns struct {
-		result1 error
+		errorChan  chan<- error
+		stopChan   chan struct{}
 	}
 	RecentLogsStub        func(appGuid string, authToken string) ([]*events.LogMessage, error)
 	recentLogsMutex       sync.RWMutex
@@ -42,38 +41,31 @@ type FakeNoaaConsumer struct {
 	}
 }
 
-func (fake *FakeNoaaConsumer) TailingLogsWithoutReconnect(appGuid string, authToken string, outputChan chan<- *events.LogMessage) error {
-	fake.tailingLogsWithoutReconnectMutex.Lock()
-	fake.tailingLogsWithoutReconnectArgsForCall = append(fake.tailingLogsWithoutReconnectArgsForCall, struct {
+func (fake *FakeNoaaConsumer) TailingLogs(appGuid string, authToken string, outputChan chan<- *events.LogMessage, errorChan chan<- error, stopChan chan struct{}) {
+	fake.tailingLogsMutex.Lock()
+	fake.tailingLogsArgsForCall = append(fake.tailingLogsArgsForCall, struct {
 		appGuid    string
 		authToken  string
 		outputChan chan<- *events.LogMessage
-	}{appGuid, authToken, outputChan})
-	fake.tailingLogsWithoutReconnectMutex.Unlock()
-	if fake.TailingLogsWithoutReconnectStub != nil {
-		return fake.TailingLogsWithoutReconnectStub(appGuid, authToken, outputChan)
-	} else {
-		return fake.tailingLogsWithoutReconnectReturns.result1
+		errorChan  chan<- error
+		stopChan   chan struct{}
+	}{appGuid, authToken, outputChan, errorChan, stopChan})
+	fake.tailingLogsMutex.Unlock()
+	if fake.TailingLogsStub != nil {
+		fake.TailingLogsStub(appGuid, authToken, outputChan, errorChan, stopChan)
 	}
 }
 
-func (fake *FakeNoaaConsumer) TailingLogsWithoutReconnectCallCount() int {
-	fake.tailingLogsWithoutReconnectMutex.RLock()
-	defer fake.tailingLogsWithoutReconnectMutex.RUnlock()
-	return len(fake.tailingLogsWithoutReconnectArgsForCall)
+func (fake *FakeNoaaConsumer) TailingLogsCallCount() int {
+	fake.tailingLogsMutex.RLock()
+	defer fake.tailingLogsMutex.RUnlock()
+	return len(fake.tailingLogsArgsForCall)
 }
 
-func (fake *FakeNoaaConsumer) TailingLogsWithoutReconnectArgsForCall(i int) (string, string, chan<- *events.LogMessage) {
-	fake.tailingLogsWithoutReconnectMutex.RLock()
-	defer fake.tailingLogsWithoutReconnectMutex.RUnlock()
-	return fake.tailingLogsWithoutReconnectArgsForCall[i].appGuid, fake.tailingLogsWithoutReconnectArgsForCall[i].authToken, fake.tailingLogsWithoutReconnectArgsForCall[i].outputChan
-}
-
-func (fake *FakeNoaaConsumer) TailingLogsWithoutReconnectReturns(result1 error) {
-	fake.TailingLogsWithoutReconnectStub = nil
-	fake.tailingLogsWithoutReconnectReturns = struct {
-		result1 error
-	}{result1}
+func (fake *FakeNoaaConsumer) TailingLogsArgsForCall(i int) (string, string, chan<- *events.LogMessage, chan<- error, chan struct{}) {
+	fake.tailingLogsMutex.RLock()
+	defer fake.tailingLogsMutex.RUnlock()
+	return fake.tailingLogsArgsForCall[i].appGuid, fake.tailingLogsArgsForCall[i].authToken, fake.tailingLogsArgsForCall[i].outputChan, fake.tailingLogsArgsForCall[i].errorChan, fake.tailingLogsArgsForCall[i].stopChan
 }
 
 func (fake *FakeNoaaConsumer) RecentLogs(appGuid string, authToken string) ([]*events.LogMessage, error) {

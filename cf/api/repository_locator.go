@@ -103,7 +103,7 @@ func NewRepositoryLocator(config core_config.ReadWriter, gatewaysByName map[stri
 	loc.domainRepo = NewCloudControllerDomainRepository(config, cloudControllerGateway, strategy)
 	loc.endpointRepo = NewEndpointRepository(config, cloudControllerGateway)
 
-	if false {
+	if true {
 		consumer := consumer.New(config.LoggregatorEndpoint(), tlsConfig, http.ProxyFromEnvironment)
 		consumer.SetDebugPrinter(terminal.DebugPrinter{})
 		loc.logsRepo = logs.NewLoggregatorLogsRepository(config, consumer, loc.authRepo)

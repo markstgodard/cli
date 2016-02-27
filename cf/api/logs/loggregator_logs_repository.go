@@ -60,50 +60,55 @@ func (repo *LoggregatorLogsRepository) RecentLogsFor(appGuid string) ([]Loggable
 	return loggableMessagesFromLoggregatorMessages(messages), nil
 }
 
-func (repo *LoggregatorLogsRepository) TailLogsFor(appGuid string, onConnect func()) (<-chan Loggable, error) {
+func (repo *LoggregatorLogsRepository) TailLogsFor(appGuid string, onConnect func(), logChan chan<- Loggable, errChan chan<- error) {
 	ticker := time.NewTicker(bufferTime)
-
-	c := make(chan Loggable)
-
 	endpoint := repo.config.LoggregatorEndpoint()
 	if endpoint == "" {
-		return nil, errors.New(T("Loggregator endpoint missing from config file"))
+		errChan <- errors.New(T("Loggregator endpoint missing from config file"))
+		close(errChan)
+		close(logChan)
+		return
 	}
 
 	repo.consumer.SetOnConnectCallback(onConnect)
-	logChan, err := repo.consumer.Tail(appGuid, repo.config.AccessToken())
+	c, err := repo.consumer.Tail(appGuid, repo.config.AccessToken())
 	switch err.(type) {
 	case nil: // do nothing
 	case *noaa_errors.UnauthorizedError:
 		repo.tokenRefresher.RefreshAuthToken()
-		logChan, err = repo.consumer.Tail(appGuid, repo.config.AccessToken())
+		c, err = repo.consumer.Tail(appGuid, repo.config.AccessToken())
 	default:
-		return nil, err
+		errChan <- err
+		close(errChan)
+		close(logChan)
+		return
 	}
 
 	if err != nil {
-		return nil, err
+		errChan <- err
+		close(errChan)
+		close(logChan)
+		return
 	}
 
 	go func() {
 		for _ = range ticker.C {
-			repo.flushMessageQueue(c)
+			repo.flushMessageQueue(logChan)
 		}
 	}()
 
 	go func() {
-		for msg := range logChan {
+		for msg := range c {
 			repo.messageQueue.PushMessage(msg)
 		}
 
-		repo.flushMessageQueue(c)
-		close(c)
+		repo.flushMessageQueue(logChan)
+		close(errChan)
+		close(logChan)
 	}()
-
-	return c, nil
 }
 
-func (repo *LoggregatorLogsRepository) flushMessageQueue(c chan Loggable) {
+func (repo *LoggregatorLogsRepository) flushMessageQueue(c chan<- Loggable) {
 	repo.messageQueue.EnumerateAndClear(func(m *logmessage.LogMessage) {
 		c <- NewLoggregatorLogMessage(m)
 	})

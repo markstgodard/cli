@@ -59,50 +59,60 @@ func (repo *NoaaLogsRepository) RecentLogsFor(appGuid string) ([]Loggable, error
 	return loggableMessagesFromNoaaMessages(noaa.SortRecent(logs)), err
 }
 
-func (repo *NoaaLogsRepository) TailLogsFor(appGuid string, onConnect func()) (<-chan Loggable, error) {
+func (repo *NoaaLogsRepository) TailLogsFor(appGuid string, onConnect func(), logChan chan<- Loggable, errChan chan<- error) {
 	ticker := time.NewTicker(bufferTime)
-	c := make(chan Loggable)
-	logChan := make(chan *events.LogMessage)
+	c := make(chan *events.LogMessage)
+	e := make(chan error)
+	stopChan := make(chan struct{})
 
 	endpoint := repo.config.DopplerEndpoint()
 	if endpoint == "" {
-		return nil, errors.New(T("Loggregator endpoint missing from config file"))
+		errChan <- errors.New(T("Loggregator endpoint missing from config file"))
+		close(errChan)
+		close(logChan)
+		return
 	}
 
 	repo.consumer.SetOnConnectCallback(onConnect)
 
 	go func() {
-		err := repo.consumer.TailingLogsWithoutReconnect(appGuid, repo.config.AccessToken(), logChan)
-		switch err.(type) {
-		case nil:
-		case *noaa_errors.UnauthorizedError:
-			repo.tokenRefresher.RefreshAuthToken()
-			repo.consumer.TailingLogsWithoutReconnect(appGuid, repo.config.AccessToken(), logChan)
-		default:
-			repo.consumer.Close()
-		}
+		for {
+			select {
+			case msg, ok := <-c:
+				if !ok {
+					repo.flushMessageQueue(logChan)
+					close(errChan)
+					close(logChan)
+					return
+				}
 
+				repo.messageQueue.PushMessage(msg)
+			case err := <-e:
+				switch err.(type) {
+				case nil:
+				case *noaa_errors.UnauthorizedError:
+					repo.tokenRefresher.RefreshAuthToken()
+					repo.TailLogsFor(appGuid, onConnect, logChan, errChan)
+				default:
+					errChan <- err
+					repo.consumer.Close()
+				}
+			}
+		}
 	}()
 
 	go func() {
 		for _ = range ticker.C {
-			repo.flushMessageQueue(c)
+			repo.flushMessageQueue(logChan)
 		}
 	}()
 
 	go func() {
-		for msg := range logChan {
-			repo.messageQueue.PushMessage(msg)
-		}
-
-		repo.flushMessageQueue(c)
-		close(c)
+		repo.consumer.TailingLogs(appGuid, repo.config.AccessToken(), c, e, stopChan)
 	}()
-
-	return c, nil
 }
 
-func (repo *NoaaLogsRepository) flushMessageQueue(c chan Loggable) {
+func (repo *NoaaLogsRepository) flushMessageQueue(c chan<- Loggable) {
 	repo.messageQueue.EnumerateAndClear(func(m *events.LogMessage) {
 		c <- NewNoaaLogMessage(m)
 	})

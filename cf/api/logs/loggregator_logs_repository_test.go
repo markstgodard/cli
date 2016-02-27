@@ -93,71 +93,99 @@ var _ = Describe("loggregator logs repository", func() {
 	})
 
 	Describe("tailing logs", func() {
+		var logChan chan Loggable
+		var errChan chan error
+
+		BeforeEach(func() {
+			logChan = make(chan Loggable)
+			errChan = make(chan error)
+		})
+
 		Context("when an error occurs", func() {
+			e := errors.New("oops")
+
 			BeforeEach(func() {
 				fakeConsumer.TailFunc = func(_, _ string) (<-chan *logmessage.LogMessage, error) {
-					return nil, errors.New("oops")
+					return nil, e
 				}
 			})
 
-			It("returns an error", func() {
-				_, err := logsRepo.TailLogsFor("app-guid", func() {})
-				Expect(err).To(Equal(errors.New("oops")))
+			It("returns an error", func(done Done) {
+				go func() {
+					Eventually(errChan).Should(Receive(&e))
+
+					close(done)
+				}()
+
+				logsRepo.TailLogsFor("app-guid", func() {}, logChan, errChan)
 			})
 		})
 
 		Context("when a LoggregatorConsumer.UnauthorizedError occurs", func() {
-
 			It("refreshes the access token", func(done Done) {
 				calledOnce := false
+
 				fakeConsumer.TailFunc = func(_, _ string) (<-chan *logmessage.LogMessage, error) {
 					if !calledOnce {
 						calledOnce = true
 						return nil, noaa_errors.NewUnauthorizedError("i'm sorry dave")
 					} else {
-						close(done)
 						return nil, nil
 					}
 				}
 
-				_, err := logsRepo.TailLogsFor("app-guid", func() {})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(authRepo.RefreshAuthTokenCallCount()).To(Equal(1))
+				go func() {
+					defer GinkgoRecover()
+
+					Eventually(authRepo.RefreshAuthTokenCallCount()).Should(Equal(1))
+					Consistently(errChan).ShouldNot(Receive())
+
+					close(done)
+				}()
+
+				logsRepo.TailLogsFor("app-guid", func() {}, logChan, errChan)
 			})
 
 			Context("when LoggregatorConsumer.UnauthorizedError occurs again", func() {
 				It("returns an error", func(done Done) {
+					err := noaa_errors.NewUnauthorizedError("All the errors")
+
 					fakeConsumer.TailFunc = func(_, _ string) (<-chan *logmessage.LogMessage, error) {
-						return nil, noaa_errors.NewUnauthorizedError("All the errors")
+						return nil, err
 					}
 
-					_, err := logsRepo.TailLogsFor("app-guid", func() {})
-					Expect(err).To(HaveOccurred())
-					close(done)
+					go func() {
+						defer GinkgoRecover()
+
+						// Not equivalent to ShouldNot(Receive(BeNil()))
+						// Should receive something, but it shouldn't be nil
+						Eventually(errChan).Should(Receive(&err))
+						close(done)
+					}()
+
+					logsRepo.TailLogsFor("app-guid", func() {}, logChan, errChan)
 				})
 			})
 		})
 
 		Context("when no error occurs", func() {
-			It("asks for the logs for the given app", func(done Done) {
+			It("asks for the logs for the given app", func() {
 				fakeConsumer.TailFunc = func(appGuid, token string) (<-chan *logmessage.LogMessage, error) {
 					Expect(appGuid).To(Equal("app-guid"))
 					Expect(token).To(Equal("the-access-token"))
-					close(done)
 					return nil, nil
 				}
 
-				logsRepo.TailLogsFor("app-guid", func() {})
+				logsRepo.TailLogsFor("app-guid", func() {}, logChan, errChan)
 			})
 
-			It("sets the on connect callback", func(done Done) {
+			It("sets the on connect callback", func() {
 				fakeConsumer.TailFunc = func(_, _ string) (<-chan *logmessage.LogMessage, error) {
-					close(done)
 					return nil, nil
 				}
 
 				called := false
-				logsRepo.TailLogsFor("app-guid", func() { called = true })
+				logsRepo.TailLogsFor("app-guid", func() { called = true }, logChan, errChan)
 				fakeConsumer.OnConnectCallback()
 				Expect(called).To(BeTrue())
 			})
@@ -181,16 +209,16 @@ var _ = Describe("loggregator logs repository", func() {
 					return logChan, nil
 				}
 
-				c, err := logsRepo.TailLogsFor("app-guid", func() {})
+				logsRepo.TailLogsFor("app-guid", func() {}, logChan, errChan)
 
-				for msg := range c {
+				for msg := range logChan {
 					receivedMessages = append(receivedMessages, msg)
 					if len(receivedMessages) >= 3 {
 						logsRepo.Close()
 					}
 				}
 
-				Expect(err).NotTo(HaveOccurred())
+				Eventually(errChan).ShouldNot(Receive())
 
 				Expect(receivedMessages).To(Equal([]Loggable{
 					NewLoggregatorLogMessage(msg1),
@@ -201,47 +229,44 @@ var _ = Describe("loggregator logs repository", func() {
 				close(done)
 			})
 
-			It("flushes remaining log messages and closes the returned channel when Close is called", func() {
-				synchronizationChannel := make(chan (bool))
+			It("flushes remaining log messages and closes the returned channel when Close is called", func(done Done) {
 				var receivedMessages []Loggable
 				msg3 := makeLogMessage("hello3", 300)
 				msg2 := makeLogMessage("hello2", 200)
 				msg1 := makeLogMessage("hello1", 100)
 
 				fakeConsumer.TailFunc = func(_, _ string) (<-chan *logmessage.LogMessage, error) {
-					logChan := make(chan *logmessage.LogMessage)
+					messageChan := make(chan *logmessage.LogMessage)
 					go func() {
-						logChan <- msg3
-						logChan <- msg2
-						logChan <- msg1
+						messageChan <- msg3
+						messageChan <- msg2
+						messageChan <- msg1
 						fakeConsumer.WaitForClose()
-						close(logChan)
+						close(messageChan)
 					}()
 
-					return logChan, nil
+					return messageChan, nil
 				}
 
 				Expect(fakeConsumer.IsClosed).To(BeFalse())
 
-				channel, err := logsRepo.TailLogsFor("app-guid", func() {})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(channel).NotTo(BeClosed())
-
 				go func() {
-					for msg := range channel {
+					for msg := range logChan {
 						receivedMessages = append(receivedMessages, msg)
 					}
-
-					synchronizationChannel <- true
+					close(done)
 				}()
+
+				logsRepo.TailLogsFor("app-guid", func() {}, logChan, errChan)
+				Expect(errChan).NotTo(Receive())
+				Expect(logChan).NotTo(BeClosed())
 
 				logsRepo.Close()
 
 				Expect(fakeConsumer.IsClosed).To(BeTrue())
 
-				<-synchronizationChannel
-
-				Expect(channel).To(BeClosed())
+				Eventually(logChan).Should(BeClosed())
+				Eventually(errChan).Should(BeClosed())
 
 				Expect(receivedMessages).To(Equal([]Loggable{
 					NewLoggregatorLogMessage(msg1),

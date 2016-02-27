@@ -219,23 +219,32 @@ func (cmd *Start) tailStagingLogs(app models.Application, startChan, doneChan ch
 		startChan <- true
 	}
 
-	c, err := cmd.logRepo.TailLogsFor(app.Guid, onConnect)
+	c := make(chan logs.Loggable)
+	e := make(chan error)
 
-	if err != nil {
-		cmd.ui.Warn(T("Warning: error tailing logs"))
-		cmd.ui.Say("%s", err)
-		close(startChan)
-		close(doneChan)
-		return
-	}
+	go cmd.logRepo.TailLogsFor(app.Guid, onConnect, c, e)
 
-	for msg := range c {
-		if msg.GetSourceName() == LogMessageTypeStaging {
-			cmd.ui.Say(msg.ToSimpleLog())
+	for {
+		select {
+		case msg, ok := <-c:
+			if !ok {
+				close(doneChan)
+				return
+			}
+
+			if msg.GetSourceName() == LogMessageTypeStaging {
+				cmd.ui.Say(msg.ToSimpleLog())
+			}
+		case err := <-e:
+			if err != nil {
+				cmd.ui.Warn(T("Warning: error tailing logs"))
+				cmd.ui.Say("%s", err)
+				close(startChan)
+				close(doneChan)
+				return
+			}
 		}
 	}
-
-	close(doneChan)
 }
 
 func (cmd *Start) waitForInstancesToStage(app models.Application) bool {

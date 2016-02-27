@@ -80,4 +80,3 @@ func (m *loggregatorLogMessage) ToSimpleLog() string {
 
 	return strings.TrimRight(msgText, "\r\n")
 }
-
