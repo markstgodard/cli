@@ -103,14 +103,14 @@ func NewRepositoryLocator(config core_config.ReadWriter, gatewaysByName map[stri
 	loc.domainRepo = NewCloudControllerDomainRepository(config, cloudControllerGateway, strategy)
 	loc.endpointRepo = NewEndpointRepository(config, cloudControllerGateway)
 
-	if true {
-		consumer := consumer.New(config.LoggregatorEndpoint(), tlsConfig, http.ProxyFromEnvironment)
-		consumer.SetDebugPrinter(terminal.DebugPrinter{})
-		loc.logsRepo = logs.NewLoggregatorLogsRepository(config, consumer, loc.authRepo)
-	} else {
+	if config.ApiVersion() > "2.29.0" {
 		consumer := noaa.NewConsumer(config.DopplerEndpoint(), tlsConfig, http.ProxyFromEnvironment)
 		consumer.SetDebugPrinter(terminal.DebugPrinter{})
 		loc.logsRepo = logs.NewNoaaLogsRepository(config, consumer, loc.authRepo)
+	} else {
+		consumer := consumer.New(config.LoggregatorEndpoint(), tlsConfig, http.ProxyFromEnvironment)
+		consumer.SetDebugPrinter(terminal.DebugPrinter{})
+		loc.logsRepo = logs.NewLoggregatorLogsRepository(config, consumer, loc.authRepo)
 	}
 
 	loc.organizationRepo = organizations.NewCloudControllerOrganizationRepository(config, cloudControllerGateway)

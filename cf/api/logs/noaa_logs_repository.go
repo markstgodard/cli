@@ -63,7 +63,6 @@ func (repo *NoaaLogsRepository) TailLogsFor(appGuid string, onConnect func(), lo
 	ticker := time.NewTicker(bufferTime)
 	c := make(chan *events.LogMessage)
 	e := make(chan error)
-	stopChan := make(chan struct{})
 
 	endpoint := repo.config.DopplerEndpoint()
 	if endpoint == "" {
@@ -95,7 +94,7 @@ func (repo *NoaaLogsRepository) TailLogsFor(appGuid string, onConnect func(), lo
 					repo.TailLogsFor(appGuid, onConnect, logChan, errChan)
 				default:
 					errChan <- err
-					repo.consumer.Close()
+					return
 				}
 			}
 		}
@@ -108,7 +107,7 @@ func (repo *NoaaLogsRepository) TailLogsFor(appGuid string, onConnect func(), lo
 	}()
 
 	go func() {
-		repo.consumer.TailingLogs(appGuid, repo.config.AccessToken(), c, e, stopChan)
+		repo.consumer.TailingLogs(appGuid, repo.config.AccessToken(), c, e)
 	}()
 }
 

@@ -9,14 +9,13 @@ import (
 )
 
 type FakeNoaaConsumer struct {
-	TailingLogsStub        func(appGuid string, authToken string, outputChan chan<- *events.LogMessage, errorChan chan<- error, stopChan chan struct{})
+	TailingLogsStub        func(appGuid string, authToken string, outputChan chan<- *events.LogMessage, errorChan chan<- error)
 	tailingLogsMutex       sync.RWMutex
 	tailingLogsArgsForCall []struct {
 		appGuid    string
 		authToken  string
 		outputChan chan<- *events.LogMessage
 		errorChan  chan<- error
-		stopChan   chan struct{}
 	}
 	RecentLogsStub        func(appGuid string, authToken string) ([]*events.LogMessage, error)
 	recentLogsMutex       sync.RWMutex
@@ -41,18 +40,17 @@ type FakeNoaaConsumer struct {
 	}
 }
 
-func (fake *FakeNoaaConsumer) TailingLogs(appGuid string, authToken string, outputChan chan<- *events.LogMessage, errorChan chan<- error, stopChan chan struct{}) {
+func (fake *FakeNoaaConsumer) TailingLogs(appGuid string, authToken string, outputChan chan<- *events.LogMessage, errorChan chan<- error) {
 	fake.tailingLogsMutex.Lock()
 	fake.tailingLogsArgsForCall = append(fake.tailingLogsArgsForCall, struct {
 		appGuid    string
 		authToken  string
 		outputChan chan<- *events.LogMessage
 		errorChan  chan<- error
-		stopChan   chan struct{}
-	}{appGuid, authToken, outputChan, errorChan, stopChan})
+	}{appGuid, authToken, outputChan, errorChan})
 	fake.tailingLogsMutex.Unlock()
 	if fake.TailingLogsStub != nil {
-		fake.TailingLogsStub(appGuid, authToken, outputChan, errorChan, stopChan)
+		fake.TailingLogsStub(appGuid, authToken, outputChan, errorChan)
 	}
 }
 
@@ -62,10 +60,10 @@ func (fake *FakeNoaaConsumer) TailingLogsCallCount() int {
 	return len(fake.tailingLogsArgsForCall)
 }
 
-func (fake *FakeNoaaConsumer) TailingLogsArgsForCall(i int) (string, string, chan<- *events.LogMessage, chan<- error, chan struct{}) {
+func (fake *FakeNoaaConsumer) TailingLogsArgsForCall(i int) (string, string, chan<- *events.LogMessage, chan<- error) {
 	fake.tailingLogsMutex.RLock()
 	defer fake.tailingLogsMutex.RUnlock()
-	return fake.tailingLogsArgsForCall[i].appGuid, fake.tailingLogsArgsForCall[i].authToken, fake.tailingLogsArgsForCall[i].outputChan, fake.tailingLogsArgsForCall[i].errorChan, fake.tailingLogsArgsForCall[i].stopChan
+	return fake.tailingLogsArgsForCall[i].appGuid, fake.tailingLogsArgsForCall[i].authToken, fake.tailingLogsArgsForCall[i].outputChan, fake.tailingLogsArgsForCall[i].errorChan
 }
 
 func (fake *FakeNoaaConsumer) RecentLogs(appGuid string, authToken string) ([]*events.LogMessage, error) {
